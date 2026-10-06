@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Safety Equipment Detector – ESP32 Simulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  --bg:#eaf0f6; --panel:#ffffff; --ink:#0c2340; --muted:#566a80; --line:#cbd6e2;
+  --navy:#0b3a66; --navy-ink:#ffffff; --accent:#f26a1b; --ok:#16864a; --bad:#d92d20;
+  --wire-gnd:#1b2330; --wire-dim:#c9a93a; --scene-wall:#dce6f0; --scene-floor:#b9c7d6;
+  --oled-bg:#031226; --oled-fg:#63ccff; --code-bg:#0e1b2e; --code-fg:#cfe0f3; --grid:#d8e2ec;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#08121f; --panel:#10213a; --ink:#e7eff9; --muted:#8ea4bd; --line:#27425f;
+    --navy:#0d4272; --wire-gnd:#9fb2c8; --wire-dim:#8a7420; --scene-wall:#162c47; --scene-floor:#0f2038;
+    --code-bg:#091525; --grid:#193150;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#08121f; --panel:#10213a; --ink:#e7eff9; --muted:#8ea4bd; --line:#27425f;
+  --navy:#0d4272; --wire-gnd:#9fb2c8; --wire-dim:#8a7420; --scene-wall:#162c47; --scene-floor:#0f2038;
+  --code-bg:#091525; --grid:#193150;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Barlow Semi Condensed",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;font-size:16px;line-height:1.4}
+.app{max-width:1320px;margin:0 auto;padding:14px}
+header.top{display:flex;align-items:center;gap:16px;background:var(--navy);color:var(--navy-ink);border-radius:10px;padding:14px 20px;flex-wrap:wrap}
+header.top svg{flex:none}
+header.top h1{margin:0;font-size:clamp(24px,4vw,38px);font-weight:700;line-height:1.05;letter-spacing:.2px}
+header.top p{margin:4px 0 0;opacity:.85;font-size:15px}
+.badge{margin-left:auto;display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:8px;background:rgba(255,255,255,.12);font-weight:700;font-size:20px;min-width:190px;justify-content:center;transition:background .2s}
+.badge i{width:14px;height:14px;border-radius:50%;background:#9db2c8;display:block}
+.badge.ok{background:#14803f}.badge.ok i{background:#b9f5d0}
+.badge.bad{background:#c4271b;animation:pulseBad .5s steps(2) infinite}.badge.bad i{background:#fff}
+@keyframes pulseBad{50%{background:#8f1c13}}
+.grid{display:grid;grid-template-columns:minmax(300px,390px) minmax(0,1fr);gap:14px;margin-top:14px}
+.col{display:grid;gap:14px;align-content:start;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card>h2{margin:0;background:var(--navy);color:#fff;font-size:18px;font-weight:600;padding:7px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card>h2 small{font-weight:400;opacity:.8;font-size:14px}
+.body{padding:12px 14px}
+.hint{color:var(--muted);font-size:14px;margin:8px 0 0}
+/* scene */
+#scene{display:block;width:100%;height:auto;background:var(--scene-wall)}
+.gear{cursor:pointer;transition:transform .6s cubic-bezier(.3,.8,.3,1);transform-origin:0 0}
+.gear:focus-visible{outline:none}
+.gear:focus-visible *{stroke:var(--accent);stroke-width:2}
+#person{transition:transform .6s cubic-bezier(.3,.8,.3,1);transform-origin:0 0}
+#cone{fill:var(--accent);opacity:0;transition:opacity .25s}
+#cone.on{opacity:.16;animation:cone 1s ease-in-out infinite alternate}
+@keyframes cone{to{opacity:.07}}
+#pirRing{fill:none;stroke:var(--accent);stroke-width:3;opacity:0}
+#pirRing.on{opacity:1}
+.controls{display:grid;gap:8px;margin-top:2px}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:9px 12px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;font:inherit;font-weight:600;cursor:pointer;text-align:left}
+.sw span.t{display:block;width:44px;height:24px;border-radius:12px;background:#8ea0b4;position:relative;transition:background .2s;flex:none}
+.sw span.t::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s}
+.sw[aria-checked="true"] span.t{background:var(--ok)}
+.sw[aria-checked="true"] span.t::after{transform:translateX(20px)}
+.sw:focus-visible,.btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.sw small{display:block;font-weight:400;color:var(--muted);font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.btn{flex:1;min-width:130px;padding:10px 12px;border-radius:8px;border:0;font:inherit;font-weight:700;cursor:pointer;background:var(--accent);color:#fff}
+.btn.alt{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn[aria-pressed="true"]{background:var(--ok);color:#fff;border-color:var(--ok)}
+/* oled */
+.oledwrap{padding:14px}
+.oledframe{background:#1f58b5;border-radius:10px;padding:16px 14px;position:relative;transition:box-shadow .2s}
+.oledframe::before,.oledframe::after{content:"";position:absolute;top:6px;width:9px;height:9px;border-radius:50%;background:#dfe9f7}
+.oledframe::before{left:7px}.oledframe::after{right:7px}
+.oledframe.bad{box-shadow:0 0 0 3px var(--bad),0 0 22px rgba(217,45,32,.6)}
+.screen{background:var(--oled-bg);color:var(--oled-fg);font-family:"VT323","IBM Plex Mono",monospace;font-size:clamp(22px,3.2vw,30px);line-height:1.08;padding:10px 14px 8px;aspect-ratio:2/1;display:flex;flex-direction:column;justify-content:space-between;border:2px solid #0a2a55;text-shadow:0 0 6px rgba(99,204,255,.55)}
+.screen .ttl{text-align:center}
+.screen .ln{display:flex;justify-content:space-between;padding:0 4px}
+.screen .ln b{font-weight:400}
+.screen .ln b.inv{background:var(--oled-fg);color:var(--oled-bg);padding:0 6px;text-shadow:none}
+.screen .foot{display:flex;align-items:center;justify-content:center;gap:10px;height:34px}
+.screen .foot svg{height:28px;width:auto}
+.screen .foot.bad svg{animation:blink .5s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+.buzzline{text-align:center;margin-top:10px;font-weight:700;font-size:20px;color:var(--muted);letter-spacing:.3px}
+.buzzline.on{color:var(--bad)}
+/* circuit */
+.chips{display:flex;flex-wrap:wrap;gap:8px;padding:10px 14px 0}
+.chip{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:14px;font-weight:600}
+.chip b{font-family:"IBM Plex Mono",monospace;font-weight:500;padding:1px 7px;border-radius:4px;background:#8ea0b4;color:#fff;min-width:24px;text-align:center}
+.chip.hi b{background:var(--ok)}
+.chip.hi.buz b{background:var(--bad)}
+.chip em{font-style:normal;color:var(--muted);font-weight:500}
+.scroll{overflow-x:auto;padding:8px 8px 12px}
+#circuit{display:block;width:100%;min-width:640px;height:auto;background-image:radial-gradient(var(--grid) 1px,transparent 1px);background-size:18px 18px;border-radius:8px}
+#circuit text{font-family:"Barlow Semi Condensed",Arial,sans-serif;fill:var(--ink)}
+.wire{fill:none;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round}
+.w-vcc{stroke:#e53935}.w-gnd{stroke:var(--wire-gnd)}.w-sig{stroke:var(--wire-dim)}
+.w-sda{stroke:#1f9d55}
+.flow{fill:none;stroke:#ffd23f;stroke-width:3.5;stroke-linecap:round;stroke-dasharray:5 11;opacity:0;transition:opacity .15s;filter:drop-shadow(0 0 3px #ffd23f)}
+.flow.on{opacity:1;animation:dash .6s linear infinite}
+.flow.sda{stroke:#6ff0a0;filter:drop-shadow(0 0 3px #6ff0a0)}
+.flow.buz{stroke:#ff6a5c;filter:drop-shadow(0 0 4px #ff3b2f)}
+@keyframes dash{to{stroke-dashoffset:-16}}
+.led{fill:#506070}.led.on{fill:#3dff7a;filter:drop-shadow(0 0 4px #3dff7a)}
+#pirGlow{fill:none;stroke:var(--accent);stroke-width:4;opacity:0}
+#pirGlow.on{opacity:1;animation:glow .8s ease-in-out infinite alternate}
+@keyframes glow{to{stroke-width:9;opacity:.5}}
+#espLed{animation:blink 1s steps(2) infinite}
+.wave{fill:none;stroke:var(--bad);stroke-width:4;stroke-linecap:round;opacity:0}
+#buzzer.on .wave{animation:wave .5s linear infinite}
+#buzzer.on .wave:nth-child(2){animation-delay:.12s}
+#buzzer.on .wave:nth-child(3){animation-delay:.24s}
+@keyframes wave{0%{opacity:0}30%{opacity:1}100%{opacity:0}}
+#buzzer.on #buzBody{animation:shake .08s linear infinite}
+@keyframes shake{50%{transform:translate(1.5px,0)}}
+.pinlbl{font-size:9px;font-weight:600}
+/* lower */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:1100px){.two{grid-template-columns:1fr}}
+@media (max-width:900px){.grid{grid-template-columns:1fr}.badge{margin-left:0;width:100%}}
+pre#code{margin:0;padding:12px 0;background:var(--code-bg);color:var(--code-fg);font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.65;overflow-x:auto}
+pre#code span{display:block;padding:0 14px;border-left:3px solid transparent;white-space:pre}
+pre#code span.on{background:rgba(242,106,27,.18);border-left-color:var(--accent)}
+pre#code span.off{opacity:.4}
+pre#code .c{color:#7f95ad}
+#log{background:var(--code-bg);color:var(--code-fg);font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.6;height:285px;overflow:auto;padding:10px 14px}
+#log div{white-space:pre-wrap}
+#log .bad{color:#ff8a7e}#log .ok{color:#7ff0a8}#log .dim{color:#7f95ad}
+.steps{margin:0;padding-left:20px;font-size:15px}
+.steps li{margin:3px 0}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="top">
+  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M10 42a22 22 0 0 1 44 0"/><path d="M5 42h54v8H5z"/><path d="M26 22v-6h12v6"/><path d="M32 16v22"/>
+  </svg>
+  <div>
+    <h1>Safety Equipment Detector</h1>
+    <p>ESP32 mini project · live simulation. Toggle the person, helmet and vest and watch the circuit react.</p>
+  </div>
+  <div class="badge" id="badge" role="status" aria-live="polite"><i></i><span id="badgeTxt">IDLE</span></div>
+</header>
+
+<div class="grid">
+  <!-- LEFT -->
+  <div class="col">
+    <section class="card">
+      <h2>Site gate <small>click the gear to wear it or hang it</small></h2>
+      <svg id="scene" viewBox="0 0 320 280" role="img" aria-label="A worker at a site gate with a PIR sensor and a gear rack">
+        <rect width="320" height="250" fill="var(--scene-wall)"/>
+        <rect y="250" width="320" height="30" fill="var(--scene-floor)"/>
+        <polygon id="cone" points="40,54 320,60 320,250 40,250"/>
+        <!-- rack -->
+        <rect x="62" y="38" width="104" height="112" rx="6" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="4 4"/>
+        <text x="114" y="164" text-anchor="middle" font-size="12" fill="var(--muted)" style="font-family:'Barlow Semi Condensed',Arial,sans-serif">gear rack</text>
+        <circle cx="95" cy="52" r="3" fill="var(--muted)"/><circle cx="135" cy="52" r="3" fill="var(--muted)"/>
+        <!-- post + PIR -->
+        <rect x="20" y="52" width="14" height="198" fill="#8a97a8"/>
+        <rect x="8" y="36" width="38" height="26" rx="5" fill="#f4f6f8" stroke="#8a97a8"/>
+        <circle cx="27" cy="49" r="9" fill="#fff" stroke="#8a97a8"/>
+        <circle id="pirRing" cx="27" cy="49" r="13"/>
+        <text x="52" y="30" font-size="12" font-weight="600" fill="var(--ink)" style="font-family:'Barlow Semi Condensed',Arial,sans-serif">PIR sensor</text>
+        <!-- person -->
+        <g id="person">
+          <ellipse cx="0" cy="252" rx="34" ry="5" fill="#000" opacity=".15"/>
+          <rect x="-16" y="170" width="12" height="82" rx="3" fill="#2b3a52"/>
+          <rect x="4" y="170" width="12" height="82" rx="3" fill="#2b3a52"/>
+          <rect x="-24" y="100" width="48" height="76" rx="10" fill="#4a6fa5"/>
+          <rect x="-35" y="104" width="11" height="62" rx="5" fill="#4a6fa5"/>
+          <rect x="24" y="104" width="11" height="62" rx="5" fill="#4a6fa5"/>
+          <circle cx="0" cy="76" r="20" fill="#e8b88f"/>
+          <circle cx="-7" cy="76" r="2" fill="#2b2b2b"/><circle cx="7" cy="76" r="2" fill="#2b2b2b"/>
+        </g>
+        <!-- vest -->
+        <g id="gVest" class="gear" tabindex="0" role="button" aria-label="Toggle safety vest">
+          <path d="M-27 100H-10L0 118L10 100H27V178H-27Z" fill="#ff7a1a" stroke="#c2540a" stroke-width="1.5"/>
+          <rect x="-27" y="130" width="54" height="8" fill="#e9eef3"/>
+          <rect x="-27" y="152" width="54" height="8" fill="#e9eef3"/>
+        </g>
+        <!-- helmet -->
+        <g id="gHelmet" class="gear" tabindex="0" role="button" aria-label="Toggle helmet">
+          <path d="M-25 74A25 25 0 0 1 25 74Z" fill="#f5c400" stroke="#b58f00" stroke-width="1.5"/>
+          <rect x="-31" y="72" width="62" height="7" rx="3.5" fill="#e0b000" stroke="#b58f00" stroke-width="1.5"/>
+          <rect x="-3" y="49" width="6" height="22" fill="#d9a900" opacity=".7"/>
+        </g>
+      </svg>
+      <div class="body">
+        <div class="controls">
+          <button class="sw" role="switch" aria-checked="false" data-k="person"><div>Person at the gate<small>Triggers the PIR sensor</small></div><span class="t"></span></button>
+          <button class="sw" role="switch" aria-checked="false" data-k="helmet"><div>Helmet worn<small>Magnet closes the reed switch</small></div><span class="t"></span></button>
+          <button class="sw" role="switch" aria-checked="false" data-k="vest"><div>Safety vest worn<small>Reflective tape bounces the IR beam</small></div><span class="t"></span></button>
+        </div>
+        <div class="row">
+          <button class="btn" id="auto" aria-pressed="false">▶ Run auto demo</button>
+          <button class="btn alt" id="sound" aria-pressed="false">🔇 Buzzer sound off</button>
+        </div>
+        <p class="hint">Helmet and vest are only read while the PIR output is high, so nothing is checked in an empty gate. The PIR holds its output for 1.5 s after the person leaves.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>0.96″ OLED <small>I²C · SSD1306</small></h2>
+      <div class="oledwrap">
+        <div class="oledframe" id="oledframe">
+          <div class="screen" id="screen">
+            <div class="ttl">Safety Check</div>
+            <div class="ln"><span>Helmet</span><b id="oH">--</b></div>
+            <div class="ln"><span>Vest</span><b id="oV">--</b></div>
+            <div class="ln"><span>Motion</span><b id="oM">None</b></div>
+            <div class="foot" id="oF"></div>
+          </div>
+        </div>
+        <div class="buzzline" id="buzzline">Buzzer OFF</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="col">
+    <section class="card">
+      <h2>Circuit diagram <small>live signal flow</small></h2>
+      <div class="chips" id="chips">
+        <div class="chip" id="c27"><em>G27 PIR</em><b>0</b></div>
+        <div class="chip" id="c26"><em>G26 Helmet</em><b>0</b></div>
+        <div class="chip" id="c25"><em>G25 Vest</em><b>0</b></div>
+        <div class="chip buz" id="c23"><em>G23 Buzzer</em><b>0</b></div>
+        <div class="chip hi"><em>G21/G22 I²C</em><b>OLED</b></div>
+      </div>
+      <div class="scroll">
+      <svg id="circuit" viewBox="0 0 780 440" role="img" aria-label="Circuit diagram of the ESP32 with PIR, reed switch, IR sensor, OLED and buzzer">
+        <g id="wires"></g>
+
+        <!-- PIR -->
+        <rect x="20" y="22" width="100" height="106" rx="6" fill="#2f9e4f"/>
+        <circle cx="68" cy="75" r="36" fill="#eef1f4" stroke="#b9c2cc" stroke-width="2"/>
+        <circle cx="68" cy="75" r="22" fill="#fff" stroke="#d3d9e0"/>
+        <circle id="pirGlow" cx="68" cy="75" r="40"/>
+        <rect x="120" y="52" width="14" height="56" fill="#15191f"/>
+        <g class="pinlbl"><text x="124" y="46" font-size="9" text-anchor="middle">VCC</text></g>
+        <text x="70" y="148" text-anchor="middle" font-size="13" font-weight="600">PIR Motion Sensor</text>
+        <text x="70" y="162" text-anchor="middle" font-size="12" opacity=".75">(HC-SR501)</text>
+
+        <!-- Reed -->
+        <rect x="20" y="180" width="100" height="70" rx="5" fill="#1f56a8"/>
+        <rect x="32" y="206" width="62" height="14" rx="7" fill="#a8d8c9" stroke="#6aa898"/>
+        <line x1="40" y1="213" x2="86" y2="213" stroke="#555" stroke-width="2"/>
+        <circle class="led" id="reedLed" cx="102" cy="194" r="4"/>
+        <rect x="120" y="187" width="14" height="56" fill="#15191f"/>
+        <text x="70" y="268" text-anchor="middle" font-size="13" font-weight="600">Helmet Detection Sensor</text>
+        <text x="70" y="282" text-anchor="middle" font-size="12" opacity=".75">(Magnetic / Reed Switch)</text>
+
+        <!-- IR -->
+        <rect x="20" y="318" width="100" height="70" rx="5" fill="#1f56a8"/>
+        <circle cx="42" cy="338" r="9" fill="#222"/><circle cx="42" cy="368" r="9" fill="#d8dde3" stroke="#aeb7c2"/>
+        <circle class="led" id="irLed" cx="102" cy="332" r="4"/>
+        <rect x="120" y="325" width="14" height="56" fill="#15191f"/>
+        <text x="70" y="406" text-anchor="middle" font-size="13" font-weight="600">Safety Vest Detection Sensor</text>
+        <text x="70" y="420" text-anchor="middle" font-size="12" opacity=".75">(IR Sensor)</text>
+
+        <!-- ESP32 -->
+        <rect x="300" y="30" width="160" height="390" rx="8" fill="#161b23" stroke="#2a323e" stroke-width="2"/>
+        <text x="380" y="22" text-anchor="middle" font-size="14" font-weight="700">ESP32 Dev Module</text>
+        <rect x="330" y="46" width="100" height="96" rx="4" fill="#c4cad2"/>
+        <text x="380" y="98" text-anchor="middle" font-size="12" font-weight="600" style="fill:#2d3640">ESP-WROOM-32</text>
+        <text x="380" y="114" text-anchor="middle" font-size="9" style="fill:#4a5663">240 MHz · Wi-Fi · BT</text>
+        <circle id="espLed" cx="440" cy="190" r="4" fill="#ff5a4a"/>
+        <rect x="355" y="396" width="50" height="26" rx="3" fill="#cfd4db"/>
+        <rect x="318" y="390" width="22" height="16" rx="3" fill="#2a323e"/><rect x="420" y="390" width="22" height="16" rx="3" fill="#2a323e"/>
+        <g id="espPins"></g>
+
+        <!-- OLED -->
+        <rect x="590" y="20" width="170" height="112" rx="5" fill="#1f58b5"/>
+        <rect x="570" y="32" width="14" height="76" fill="#15191f"/>
+        <rect x="602" y="34" width="146" height="84" fill="#031226" stroke="#0a2a55"/>
+        <g id="miniOled" style="font-family:'IBM Plex Mono',monospace;font-size:10px;fill:#63ccff">
+          <text x="675" y="49" text-anchor="middle" style="fill:#63ccff;font-family:'IBM Plex Mono',monospace;font-size:10px">Safety Check</text>
+          <text x="610" y="65" id="m1" style="fill:#63ccff;font-family:'IBM Plex Mono',monospace;font-size:10px">Helmet : --</text>
+          <text x="610" y="79" id="m2" style="fill:#63ccff;font-family:'IBM Plex Mono',monospace;font-size:10px">Vest   : --</text>
+          <text x="610" y="93" id="m3" style="fill:#63ccff;font-family:'IBM Plex Mono',monospace;font-size:10px">Motion : None</text>
+          <text x="675" y="111" id="m4" text-anchor="middle" style="fill:#63ccff;font-family:'IBM Plex Mono',monospace;font-size:10px">waiting…</text>
+        </g>
+        <text x="675" y="152" text-anchor="middle" font-size="13" font-weight="600">0.96″ OLED Display (I²C)</text>
+        <g class="pinlbl" style="font-size:8px"></g>
+
+        <!-- Buzzer -->
+        <g id="buzzer">
+          <rect x="570" y="316" width="14" height="40" fill="#15191f"/>
+          <g id="buzBody"><circle cx="660" cy="336" r="44" fill="#16181c"/><circle cx="660" cy="336" r="12" fill="#2a2d33"/><text x="632" y="320" style="fill:#ff6a5c;font-size:14px;font-weight:700">+</text></g>
+          <path class="wave" d="M716 316a30 30 0 0 1 0 40"/>
+          <path class="wave" d="M730 306a46 46 0 0 1 0 60"/>
+          <path class="wave" d="M744 296a62 62 0 0 1 0 80"/>
+        </g>
+        <text x="660" y="402" text-anchor="middle" font-size="13" font-weight="600">Buzzer (Active)</text>
+      </svg>
+      </div>
+    </section>
+
+    <div class="two">
+      <section class="card">
+        <h2>Firmware loop <small>highlighted = running now</small></h2>
+<pre id="code"><span class="on">void loop() {</span>
+<span class="on">  bool motion = digitalRead(PIR);      <i class="c">// G27</i></span>
+<span class="on">  bool helmet = digitalRead(HELMET);   <i class="c">// G26</i></span>
+<span class="on">  bool vest   = digitalRead(VEST);     <i class="c">// G25</i></span>
+<span class="on">  showStatus(motion, helmet, vest);    <i class="c">// OLED</i></span>
+<span class="on">  if (motion &amp;&amp; (!helmet || !vest)) {</span>
+<span id="lHi">    digitalWrite(BUZZER, HIGH);        <i class="c">// alert</i></span>
+<span>  } else {</span>
+<span id="lLo">    digitalWrite(BUZZER, LOW);</span>
+<span>  }</span>
+<span class="on">  delay(100);</span>
+<span>}</span></pre>
+      </section>
+      <section class="card">
+        <h2>Serial monitor <small>115200 baud</small></h2>
+        <div id="log" aria-live="off"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>How it works</h2>
+      <div class="body">
+        <ol class="steps">
+          <li>A person enters and the PIR sensor detects motion.</li>
+          <li>The reed switch closes if a magnet in the helmet is near.</li>
+          <li>The IR sensor sees the reflective tape on the vest.</li>
+          <li>The ESP32 shows all three readings on the OLED.</li>
+          <li>If anything is missing, the buzzer sounds and the missing item is highlighted.</li>
+        </ol>
+      </div>
+    </section>
+  </div>
+</div>
+</div>
+
+<script>
+(function(){
+  var $ = function(s){return document.querySelector(s)};
+  var NS = 'http://www.w3.org/2000/svg';
+  var HOLD = 1500;
+  var S = {person:false, helmet:false, vest:false, sound:false, lastSeen:-1e9};
+  var t0 = performance.now();
+
+  /* ---------- wires ---------- */
+  var wires = [
+    // id, x1,y1, mx, x2,y2, type, flow-class
+    ['pv',134,60,240,300,85,'vcc'], ['pir',134,80,220,300,105,'sig',''], ['pg',134,100,200,300,125,'gnd'],
+    ['rv',134,195,240,300,220,'vcc'], ['reed',134,215,220,300,240,'sig',''], ['rg',134,235,200,300,260,'gnd'],
+    ['iv',134,330,240,300,355,'vcc'], ['ir',134,350,220,300,375,'sig',''], ['ig',134,370,200,300,395,'gnd'],
+    ['ov',460,65,500,570,40,'vcc'], ['og',460,85,520,570,60,'gnd'],
+    ['scl',460,105,540,570,80,'sig',''], ['sda',460,125,560,570,100,'sig','sda'],
+    ['buz',460,355,510,570,330,'sig','buz'], ['bg',460,375,530,570,350,'gnd']
+  ];
+  var wg = $('#wires');
+  wires.forEach(function(w){
+    var d = 'M'+w[1]+' '+w[2]+'H'+w[3]+'V'+w[5]+'H'+w[4];
+    var p = document.createElementNS(NS,'path');
+    p.setAttribute('d',d);
+    p.setAttribute('class','wire w-'+w[6]+(w[7]==='sda'?' w-sda':''));
+    wg.appendChild(p);
+    if(w[6]==='sig'){
+      var f = document.createElementNS(NS,'path');
+      f.setAttribute('d',d); f.setAttribute('id','f-'+w[0]);
+      f.setAttribute('class','flow '+(w[7]||''));
+      wg.appendChild(f);
+    }
+  });
+  // ESP pin stubs + labels
+  var pg = $('#espPins');
+  function pin(side,y,label){
+    var r = document.createElementNS(NS,'rect');
+    r.setAttribute('x', side==='L'?294:454); r.setAttribute('y',y-3);
+    r.setAttribute('width',12); r.setAttribute('height',6); r.setAttribute('fill','#d9b44a');
+    pg.appendChild(r);
+    var t = document.createElementNS(NS,'text');
+    t.setAttribute('x', side==='L'?312:448); t.setAttribute('y',y+3);
+    t.setAttribute('text-anchor', side==='L'?'start':'end');
+    t.setAttribute('font-size','9'); t.setAttribute('style','fill:#9fb2c8');
+    t.textContent = label; pg.appendChild(t);
+  }
+  [[85,'VIN'],[105,'G27'],[125,'GND'],[220,'VIN'],[240,'G26'],[260,'GND'],[355,'VIN'],[375,'G25'],[395,'GND']].forEach(function(a){pin('L',a[0],a[1])});
+  [[65,'3V3'],[85,'GND'],[105,'G22 SCL'],[125,'G21 SDA'],[355,'G23'],[375,'GND']].forEach(function(a){pin('R',a[0],a[1])});
+  // header pin labels
+  function lbl(x,y,t){var e=document.createElementNS(NS,'text');e.setAttribute('x',x);e.setAttribute('y',y);e.setAttribute('font-size','8');e.setAttribute('text-anchor','end');e.setAttribute('style','fill:#9fb2c8');e.textContent=t;$('#circuit').appendChild(e)}
+
+  function setFlow(id,on){var e=$('#f-'+id); if(e) e.classList.toggle('on',!!on)}
+  setFlow('scl',true); setFlow('sda',true);
+
+  /* ---------- scene ---------- */
+  var PX_IN = 205, PX_OUT = 440;
+  function placeScene(){
+    var px = S.person ? PX_IN : PX_OUT;
+    $('#person').style.transform = 'translate('+px+'px,0)';
+    $('#gHelmet').style.transform = S.helmet ? 'translate('+px+'px,0)' : 'translate(95px,25.6px) scale(.9)';
+    $('#gVest').style.transform = S.vest ? 'translate('+px+'px,0)' : 'translate(135px,4px) scale(.7)';
+  }
+
+  /* ---------- OLED ---------- */
+  var ICON_WARN = '<svg viewBox="0 0 40 36" fill="none" stroke="#63ccff" stroke-width="3" stroke-linejoin="round"><path d="M20 4L37 33H3Z"/><path d="M20 14v10M20 28v1.5" stroke-linecap="round"/></svg>';
+  var ICON_OK = '<svg viewBox="0 0 40 36" fill="none" stroke="#63ccff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 19l9 9L34 8"/></svg>';
+  function val(el,txt,inv){el.textContent=txt; el.className=inv?'inv':''}
+
+  /* ---------- log ---------- */
+  function stamp(){var s=(performance.now()-t0)/1000;var m=Math.floor(s/60);return '['+('0'+m).slice(-2)+':'+('0'+(s%60).toFixed(1)).slice(-4)+'] '}
+  function log(msg,cls){
+    var el=$('#log'), d=document.createElement('div');
+    if(cls) d.className=cls; d.textContent=stamp()+msg; el.appendChild(d);
+    while(el.children.length>80) el.removeChild(el.firstChild);
+    el.scrollTop=el.scrollHeight;
+  }
+
+  /* ---------- sound ---------- */
+  var ac,osc,gain,timer;
+  function beep(on){
+    try{
+      if(on && S.sound){
+        if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)();
+        if(ac.state==='suspended') ac.resume();
+        if(!osc){osc=ac.createOscillator();gain=ac.createGain();osc.type='square';osc.frequency.value=2300;gain.gain.value=0;osc.connect(gain);gain.connect(ac.destination);osc.start();}
+        if(!timer){var b=false;timer=setInterval(function(){b=!b;gain.gain.setTargetAtTime(b?0.035:0,ac.currentTime,0.01)},250);}
+      }else{
+        if(timer){clearInterval(timer);timer=null}
+        if(gain&&ac) gain.gain.setTargetAtTime(0,ac.currentTime,0.01);
+      }
+    }catch(e){}
+  }
+
+  /* ---------- render ---------- */
+  var lastKey='', lastLog='';
+  function render(st){
+    var key=[st.pir,st.h,st.v,st.alert,S.sound].join();
+    if(key===lastKey) return; lastKey=key;
+    var pir=st.pir,h=st.h,v=st.v,alert=st.alert;
+
+    // chips
+    function chip(id,on){var c=$(id);c.classList.toggle('hi',on);c.querySelector('b').textContent=on?'1':'0'}
+    chip('#c27',pir);chip('#c26',h);chip('#c25',v);chip('#c23',alert);
+    // wires
+    setFlow('pir',pir);setFlow('reed',h);setFlow('ir',v);setFlow('buz',alert);
+    // parts
+    $('#pirGlow').classList.toggle('on',pir);
+    $('#pirRing').classList.toggle('on',pir);
+    $('#cone').classList.toggle('on',pir);
+    $('#reedLed').classList.toggle('on',h);
+    $('#irLed').classList.toggle('on',v);
+    $('#buzzer').classList.toggle('on',alert);
+    // oled
+    val($('#oH'), pir?(h?'OK':'Missing'):'--', pir&&!h);
+    val($('#oV'), pir?(v?'OK':'Missing'):'--', pir&&!v);
+    val($('#oM'), pir?'OK':'None', false);
+    var foot=$('#oF');
+    if(alert){foot.className='foot bad';foot.innerHTML=ICON_WARN}
+    else if(pir){foot.className='foot';foot.innerHTML=ICON_OK+'<span>All clear</span>'}
+    else {foot.className='foot';foot.innerHTML='<span>Waiting…</span>'}
+    $('#oledframe').classList.toggle('bad',alert);
+    $('#m1').textContent='Helmet : '+(pir?(h?'OK':'Missing'):'--');
+    $('#m2').textContent='Vest   : '+(pir?(v?'OK':'Missing'):'--');
+    $('#m3').textContent='Motion : '+(pir?'OK':'None');
+    $('#m4').textContent=alert?'⚠ BUZZER ON':(pir?'✔ all clear':'waiting…');
+    var bl=$('#buzzline'); bl.textContent=alert?'Buzzer ON':'Buzzer OFF'; bl.classList.toggle('on',alert);
+    // badge
+    var b=$('#badge'); b.className='badge'+(alert?' bad':(pir?' ok':''));
+    $('#badgeTxt').textContent=alert?'ALERT: EQUIPMENT MISSING':(pir?'ALL CLEAR':'IDLE');
+    // code
+    $('#lHi').className=alert?'on':'off';
+    $('#lLo').className=alert?'off':'on';
+    // sound
+    beep(alert);
+    // serial
+    var lk=[pir,h,v,alert].join();
+    if(lk!==lastLog){
+      lastLog=lk;
+      var miss=[]; if(!h)miss.push('helmet'); if(!v)miss.push('vest');
+      var line='PIR='+(pir?1:0)+' HELMET='+(h?1:0)+' VEST='+(v?1:0)+' BUZZER='+(alert?1:0);
+      if(alert) log(line+'  ALERT: '+miss.join(' + ')+' missing','bad');
+      else if(pir) log(line+'  all equipment detected','ok');
+      else log(line+'  no motion, idle','dim');
+    }
+  }
+
+  function tick(){
+    var now=performance.now();
+    if(S.person) S.lastSeen=now;
+    var pir=(now-S.lastSeen)<HOLD;
+    var h=pir&&S.helmet, v=pir&&S.vest;
+    render({pir:pir,h:h,v:v,alert:pir&&(!h||!v)});
+  }
+
+  /* ---------- controls ---------- */
+  function sync(){
+    document.querySelectorAll('.sw').forEach(function(b){b.setAttribute('aria-checked',S[b.dataset.k]?'true':'false')});
+    placeScene();
+  }
+  function stopAuto(){ if(autoT){clearTimeout(autoT);autoT=null} var a=$('#auto');a.setAttribute('aria-pressed','false');a.textContent='▶ Run auto demo' }
+  var autoT=null, ai=0;
+  document.querySelectorAll('.sw').forEach(function(b){
+    b.addEventListener('click',function(){stopAuto();S[b.dataset.k]=!S[b.dataset.k];sync()});
+  });
+  function toggleGear(k){return function(e){ if(e.type==='keydown'&&e.key!=='Enter'&&e.key!==' ')return; e.preventDefault(); stopAuto(); S[k]=!S[k]; sync(); }}
+  ['helmet','vest'].forEach(function(k){
+    var el=$(k==='helmet'?'#gHelmet':'#gVest');
+    el.addEventListener('click',toggleGear(k)); el.addEventListener('keydown',toggleGear(k));
+  });
+
+  var steps=[
+    function(){S.person=false;S.helmet=false;S.vest=false},
+    function(){S.person=true},
+    function(){S.helmet=true},
+    function(){S.vest=true},
+    function(){S.helmet=false},
+    function(){S.helmet=true},
+    function(){S.person=false}
+  ];
+  function runAuto(){
+    steps[ai%steps.length](); ai++; sync();
+    autoT=setTimeout(runAuto, ai%steps.length===2?2600:2300);
+  }
+  $('#auto').addEventListener('click',function(){
+    if(autoT){stopAuto();return}
+    ai=0; this.setAttribute('aria-pressed','true'); this.textContent='■ Stop auto demo'; runAuto();
+  });
+  $('#sound').addEventListener('click',function(){
+    S.sound=!S.sound;
+    this.setAttribute('aria-pressed',S.sound?'true':'false');
+    this.textContent=S.sound?'🔊 Buzzer sound on':'🔇 Buzzer sound off';
+    lastKey=''; tick();
+  });
+
+  /* ---------- boot ---------- */
+  log('ESP32 boot, 240 MHz','dim');
+  log('I2C OLED found at 0x3C','dim');
+  log('PIR warming up… ready','dim');
+  sync();
+  setInterval(tick,100);
+  tick();
+})();
+</script>
+</body>
+</html>
